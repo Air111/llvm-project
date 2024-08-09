@@ -393,10 +393,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
         setOperationAction({ISD::CTTZ, ISD::CTTZ_ZERO_UNDEF}, MVT::i32, Custom);
     }
   } else {
-    setOperationAction(ISD::CTTZ, XLenVT, Expand);
-    if (!Subtarget.is64Bit())
-      setOperationAction(ISD::CTPOP, MVT::i32, LibCall);
-    setOperationAction(ISD::CTPOP, MVT::i64, LibCall);
+    setOperationAction({ISD::CTTZ, ISD::CTPOP}, XLenVT, Expand);
     if (RV64LegalI32 && Subtarget.is64Bit())
       setOperationAction({ISD::CTTZ, ISD::CTPOP}, MVT::i32, Expand);
   }
@@ -4083,7 +4080,7 @@ static SDValue lowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
     // of the component build_vectors.  We eagerly lower to scalable and
     // insert_subvector here to avoid DAG combining it back to a large
     // build_vector.
-    SmallVector<SDValue> BuildVectorOps(Op->op_begin(), Op->op_end());
+    SmallVector<SDValue> BuildVectorOps(Op->ops());
     unsigned NumOpElts = M1VT.getVectorMinNumElements();
     SDValue Vec = DAG.getUNDEF(ContainerVT);
     for (unsigned i = 0; i < VT.getVectorNumElements(); i += ElemsPerVReg) {
@@ -8785,7 +8782,7 @@ static SDValue lowerVectorIntrinsicScalars(SDValue Op, SelectionDAG &DAG,
   unsigned SplatOp = II->ScalarOperand + 1 + HasChain;
   assert(SplatOp < Op.getNumOperands());
 
-  SmallVector<SDValue, 8> Operands(Op->op_begin(), Op->op_end());
+  SmallVector<SDValue, 8> Operands(Op->ops());
   SDValue &ScalarOp = Operands[SplatOp];
   MVT OpVT = ScalarOp.getSimpleValueType();
   MVT XLenVT = Subtarget.getXLenVT();
@@ -15518,7 +15515,7 @@ static SDValue performSRACombine(SDNode *N, SelectionDAG &DAG,
       return SDValue();
 
     // AddC needs to have at least 32 trailing zeros.
-    if (AddC->getAPIntValue().countr_zero() < 32)
+    if (llvm::countr_zero(AddC->getZExtValue()) < 32)
       return SDValue();
 
     // All users should be a shift by constant less than or equal to 32. This
@@ -15556,7 +15553,7 @@ static SDValue performSRACombine(SDNode *N, SelectionDAG &DAG,
   // constant.
   if (AddC) {
     SDValue ShiftedAddC =
-        DAG.getConstant(AddC->getAPIntValue().lshr(32), DL, MVT::i64);
+        DAG.getConstant(AddC->getZExtValue() >> 32, DL, MVT::i64);
     if (IsAdd)
       In = DAG.getNode(ISD::ADD, DL, MVT::i64, In, ShiftedAddC);
     else
